@@ -334,6 +334,7 @@ export const vouchersAPI = {
     ),
     downloadSinglePdf: (voucherId, options = {}) => apiDownload(`/vouchers/${encodeURIComponent(voucherId)}/pdf`, { showLoading: true, ...options }),
     downloadSinglePng: (voucherId, options = {}) => apiDownload(`/vouchers/${encodeURIComponent(voucherId)}/png`, { showLoading: true, ...options }),
+    lotterySend: (payload, options = {}) => api.post('/vouchers/lottery/send', payload, { showErrors: true, ...options }),
     validate: (code, { job_id = null, total = null } = {}, options = {}) => {
         const params = new URLSearchParams();
         if (code) params.set('code', code);
@@ -391,8 +392,11 @@ export const invoicesAPI = {
     getAll: (filters = {}, page = 1) => api.get(`/invoices?${new URLSearchParams({ ...filters, page })}`),
     getById: (id) => api.get(`/invoices/${id}`),
     create: (data, options = {}) => api.post('/invoices', data, { successMessage: 'Faktura utworzona', ...options }),
+    createDeposit: (job_id, options = {}) => api.post('/invoices/deposit', { job_id }, { successMessage: 'Faktura zaliczkowa utworzona', ...options }),
+    createFinal: (job_id, options = {}) => api.post('/invoices/final', { job_id }, { successMessage: 'Faktura końcowa utworzona', ...options }),
+    createCorrection: (invoice_id, data, options = {}) => api.post(`/invoices/${invoice_id}/correction`, data, { successMessage: 'Faktura korygująca utworzona', ...options }),
     send: (id, options = {}) => api.post(`/invoices/${id}/send`, {}, { successMessage: 'Faktura wysłana', ...options }),
-    delete: (id, options = {}) => api.delete(`/invoices/${id}`, { successMessage: 'Faktura usunięta', ...options }),
+    delete: (id, options = {}) => api.delete(`/invoices/${id}`, { successMessage: 'Faktura anulowana', ...options }),
 };
 
 export const paymentsAPI = {

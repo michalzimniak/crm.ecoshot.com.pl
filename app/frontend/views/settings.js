@@ -232,6 +232,11 @@ export async function renderSettings() {
                                         <div class="form-text">Prefix dla faktur zaliczkowych (np. FZV/2026/001).</div>
                                     </div>
                                     <div class="mb-3">
+                                        <label class="form-label">Prefix Faktur Korygujących</label>
+                                        <input id="settingsInvoiceCorrectionPrefix" class="form-control" form="settingsForm" required value="${escapeHtml(invoice.correction_prefix || '')}" />
+                                        <div class="form-text">Prefix dla faktur korygujących (np. FKV/2026/001).</div>
+                                    </div>
+                                    <div class="mb-3">
                                         <label class="form-label">Format roku</label>
                                         <input id="settingsInvoiceYearFormat" class="form-control" form="settingsForm" required value="${escapeHtml(invoice.year_format || '')}" />
                                         <div class="form-text">Format dla strftime, np. %Y.</div>
@@ -986,6 +991,7 @@ export async function renderSettings() {
                 const companyEmailEl = formEl.querySelector('#settingsCompanyEmail');
                 const invoicePrefixEl = container.querySelector('#settingsInvoicePrefix');
                 const invoiceDepositPrefixEl = container.querySelector('#settingsInvoiceDepositPrefix');
+                const invoiceCorrectionPrefixEl = container.querySelector('#settingsInvoiceCorrectionPrefix');
                 const invoiceYearFormatEl = container.querySelector('#settingsInvoiceYearFormat');
                 const canvaAccessTokenEl = container.querySelector('#settingsCanvaAccessToken');
                 const canvaClientIdEl = container.querySelector('#settingsCanvaClientId');
@@ -995,6 +1001,7 @@ export async function renderSettings() {
                 ok = requireEmail(companyEmailEl) && ok;
                 ok = requireValue(invoicePrefixEl, 'Wpisz prefix') && ok;
                 ok = requireValue(invoiceDepositPrefixEl, 'Wpisz prefix faktur zaliczkowych') && ok;
+                ok = requireValue(invoiceCorrectionPrefixEl, 'Wpisz prefix faktur korygujących') && ok;
                 ok = requireValue(invoiceYearFormatEl, 'Wpisz format roku') && ok;
                 ok = requireValue(invoiceVatRateEl, 'Wybierz VAT') && ok;
                 ok = requireValue(companyNameEl, 'Wpisz nazwę firmy') && ok;
@@ -1015,6 +1022,7 @@ export async function renderSettings() {
                     invoice: {
                         prefix: (invoicePrefixEl?.value || '').trim(),
                         deposit_prefix: (invoiceDepositPrefixEl?.value || '').trim(),
+                        correction_prefix: (invoiceCorrectionPrefixEl?.value || '').trim(),
                         year_format: (invoiceYearFormatEl?.value || '').trim(),
                         vat_rate: (invoiceVatRateEl?.value || '').trim(),
                         vat_exempt: Boolean(invoiceVatExemptEl?.checked),
@@ -1385,6 +1393,60 @@ function openPromotionModal({ mode, promotionId = null }) {
     const backExistingEl = document.getElementById('promotionVoucherBackExisting');
     const saveBtn = document.getElementById('savePromotionBtn');
 
+    const clearPreviewObjectUrl = (el) => {
+        if (!el) return;
+        const prev = el.dataset.objectUrl;
+        if (prev) {
+            try { URL.revokeObjectURL(prev); } catch (_) { /* ignore */ }
+            delete el.dataset.objectUrl;
+        }
+    };
+
+    const setPreviewHtml = (el, html) => {
+        if (!el) return;
+        clearPreviewObjectUrl(el);
+        el.innerHTML = html || '';
+    };
+
+    const renderExistingTemplatePreview = (el, promotionId, side, relPath) => {
+        if (!el) return;
+        if (!relPath) {
+            setPreviewHtml(el, '<span class="text-muted">Aktualnie: brak</span>');
+            return;
+        }
+        // Use API endpoint for safe preview.
+        const src = `#/`; // dummy to avoid accidental navigation
+        // Build absolute URL (works with SPA hash routing)
+        const url = `/api/promotions/${promotionId}/voucher-template/${side}`;
+        setPreviewHtml(
+            el,
+            `<div class="d-flex align-items-center gap-2">`
+            + `<span class="text-muted">Aktualnie:</span>`
+            + `<img src="${url}" alt="${side}" class="img-thumbnail" style="max-height:120px; max-width:100%; object-fit:contain;"/>`
+            + `</div>`
+        );
+    };
+
+    const renderSelectedFilePreview = (el, file) => {
+        if (!el) return;
+        if (!file) {
+            setPreviewHtml(el, '');
+            return;
+        }
+        if (!String(file.type || '').startsWith('image/')) {
+            setPreviewHtml(el, `<span class="text-muted">Wybrano plik: ${escapeHtml(file.name || '')}</span>`);
+            return;
+        }
+        const objectUrl = URL.createObjectURL(file);
+        el.dataset.objectUrl = objectUrl;
+        el.innerHTML = `
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-muted">Wybrano:</span>
+                <img src="${objectUrl}" alt="preview" class="img-thumbnail" style="max-height:120px; max-width:100%; object-fit:contain;"/>
+            </div>
+        `;
+    };
+
     if (form && form.dataset.wireClearOnInput !== '1') {
         wireClearOnInput(form);
         form.dataset.wireClearOnInput = '1';
@@ -1397,8 +1459,8 @@ function openPromotionModal({ mode, promotionId = null }) {
     idEl.value = '';
     if (frontEl) frontEl.value = '';
     if (backEl) backEl.value = '';
-    if (frontExistingEl) frontExistingEl.textContent = '';
-    if (backExistingEl) backExistingEl.textContent = '';
+    if (frontExistingEl) setPreviewHtml(frontExistingEl, '');
+    if (backExistingEl) setPreviewHtml(backExistingEl, '');
 
     if (!isCreate) {
         const promo = cachedPromotions.find((p) => p.id === promotionId);
@@ -1411,8 +1473,8 @@ function openPromotionModal({ mode, promotionId = null }) {
         valueEl.value = (promo.value ?? '').toString();
         durationEl.value = (promo.duration_days ?? '').toString();
         if (canvaUrlEl) canvaUrlEl.value = promo.canva_project_url || '';
-        if (frontExistingEl) frontExistingEl.textContent = promo.voucher_bg_front_path ? `Aktualnie: ${promo.voucher_bg_front_path}` : 'Aktualnie: brak';
-        if (backExistingEl) backExistingEl.textContent = promo.voucher_bg_back_path ? `Aktualnie: ${promo.voucher_bg_back_path}` : 'Aktualnie: brak';
+        renderExistingTemplatePreview(frontExistingEl, promo.id, 'front', promo.voucher_bg_front_path);
+        renderExistingTemplatePreview(backExistingEl, promo.id, 'back', promo.voucher_bg_back_path);
 
         if (textXEl) textXEl.value = promo.voucher_text_x_px ?? '';
         if (textYEl) textYEl.value = promo.voucher_text_y_px ?? '';
@@ -1422,8 +1484,8 @@ function openPromotionModal({ mode, promotionId = null }) {
         if (fontSizeEl) fontSizeEl.value = promo.voucher_text_font_size_pt ?? '';
     } else {
         if (canvaUrlEl) canvaUrlEl.value = '';
-        if (frontExistingEl) frontExistingEl.textContent = '';
-        if (backExistingEl) backExistingEl.textContent = '';
+        if (frontExistingEl) setPreviewHtml(frontExistingEl, '');
+        if (backExistingEl) setPreviewHtml(backExistingEl, '');
 
         if (textXEl) textXEl.value = '';
         if (textYEl) textYEl.value = '';
@@ -1431,6 +1493,24 @@ function openPromotionModal({ mode, promotionId = null }) {
         if (qrYEl) qrYEl.value = '';
         if (fontFamilyEl) fontFamilyEl.value = '';
         if (fontSizeEl) fontSizeEl.value = '';
+    }
+
+    // Live preview for newly selected files.
+    if (frontEl) {
+        frontEl.onchange = () => {
+            const f = frontEl.files?.[0] || null;
+            if (f) {
+                renderSelectedFilePreview(frontExistingEl, f);
+            }
+        };
+    }
+    if (backEl) {
+        backEl.onchange = () => {
+            const f = backEl.files?.[0] || null;
+            if (f) {
+                renderSelectedFilePreview(backExistingEl, f);
+            }
+        };
     }
 
     saveBtn.onclick = async () => {

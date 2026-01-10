@@ -731,6 +731,19 @@ def purge_data(targets: Iterable[str], delete_files: bool) -> dict:
         deleted["galleries"] = db.session.query(Gallery).delete(synchronize_session=False)
 
     if "invoices" in requested:
+        # Break self-referential FK (correction invoices reference original_invoice_id).
+        # Bulk DELETE would fail on MySQL with RESTRICT.
+        try:
+            cleared = (
+                db.session.query(Invoice)
+                .filter(Invoice.original_invoice_id.isnot(None))
+                .update({Invoice.original_invoice_id: None}, synchronize_session=False)
+            )
+            deleted["invoices_original_links_cleared"] = int(cleared or 0)
+        except Exception:
+            # Best-effort: continue with deletion attempt.
+            deleted["invoices_original_links_cleared"] = 0
+
         deleted["invoices"] = db.session.query(Invoice).delete(synchronize_session=False)
 
     if "contracts" in requested:

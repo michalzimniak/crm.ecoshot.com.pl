@@ -31,7 +31,17 @@ class VoucherGenerateSchema(Schema):
     count = fields.Integer(required=True, validate=validate.Range(min=1, max=200))
 
 
+class VoucherLotterySendSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    promotion_id = fields.Integer(required=False, allow_none=True)
+    count = fields.Integer(required=True, validate=validate.Range(min=1, max=200))
+
+
 voucher_schema = VoucherSchema()
 vouchers_schema = VoucherSchema(many=True)
 
 voucher_generate_schema = VoucherGenerateSchema()
+
+voucher_lottery_send_schema = VoucherLotterySendSchema()

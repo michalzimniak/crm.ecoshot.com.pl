@@ -10,9 +10,19 @@ from werkzeug.exceptions import BadRequest, NotFound
 
 from app.extensions import db
 from app.invoices.services import get_invoice_by_id
+from app.invoices.models import Invoice
 from app.jobs.services import get_job_by_id
 from app.payments.models import Payment
 from app.payments.payu import PayUClient
+
+
+def _get_active_deposit_invoice_for_job(job_id: int) -> Invoice | None:
+    return (
+        Invoice.query.filter_by(job_id=job_id, invoice_type='deposit')
+        .filter(Invoice.status != 'cancelled')
+        .order_by(Invoice.created_at.desc(), Invoice.id.desc())
+        .first()
+    )
 
 
 def _to_decimal(value) -> Decimal:
@@ -77,23 +87,34 @@ def create_payment(data: dict) -> Payment:
     if not invoice_id and not job_id:
         raise BadRequest('Wymagane: invoice_id lub job_id')
 
+    kind = data.get('kind') or ('invoice' if invoice_id else 'prepayment')
+
     invoice = None
     job = None
+
+    if job_id:
+        job = get_job_by_id(int(job_id))
+
+    # For deposit payments we want them to affect the deposit invoice.
+    if kind == 'deposit' and job is not None and not invoice_id:
+        linked = _get_active_deposit_invoice_for_job(job.id)
+        if not linked:
+            raise BadRequest('Brak faktury zaliczkowej dla tego zlecenia — wystaw fakturę zaliczkową i spróbuj ponownie')
+        invoice = linked
+        invoice_id = linked.id
 
     if invoice_id:
         invoice = get_invoice_by_id(int(invoice_id))
         if invoice.status == 'cancelled':
             raise BadRequest('Nie można dodawać płatności do anulowanej faktury')
         job_id = invoice.job_id
-
-    if job_id:
-        job = get_job_by_id(int(job_id))
+        if job is None and job_id:
+            job = get_job_by_id(int(job_id))
 
     amount = _to_decimal(data['amount']).quantize(Decimal('0.01'))
     if amount <= 0:
         raise BadRequest('Kwota musi być większa od 0')
 
-    kind = data.get('kind') or ('invoice' if invoice_id else 'prepayment')
     source = data.get('source') or 'manual'
     currency = (data.get('currency') or 'PLN').upper()
     payment_method = data.get('payment_method') or 'transfer'
@@ -145,6 +166,14 @@ def complete_payment(payment_id: int, transaction_id: str | None = None) -> Paym
 
     if transaction_id:
         payment.transaction_id = transaction_id
+
+    # Backfill invoice link for legacy deposit payments created against a job.
+    if payment.kind == 'deposit' and payment.invoice_id is None and payment.job_id is not None:
+        linked = _get_active_deposit_invoice_for_job(int(payment.job_id))
+        if not linked:
+            raise BadRequest('Brak faktury zaliczkowej dla tego zlecenia — nie można zrealizować płatności zaliczkowej')
+        payment.invoice = linked
+        payment.invoice_id = linked.id
 
     payment.complete()
     db.session.commit()

@@ -22,6 +22,16 @@ class Invoice(db.Model):
 	job_id = db.Column(db.Integer, db.ForeignKey('jobs.id'), nullable=False, index=True)
 	invoice_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
 
+	invoice_type = db.Column(
+		db.Enum('standard', 'deposit', 'final', 'correction', name='invoice_type_enum'),
+		nullable=False,
+		default='final',
+		index=True,
+	)
+
+	original_invoice_id = db.Column(db.Integer, db.ForeignKey('invoices.id'), nullable=True, index=True)
+	correction_reason = db.Column(db.Text)
+
 	status = db.Column(
 		db.Enum('draft', 'issued', 'paid', 'partially_paid', 'overdue', 'cancelled', name='invoice_status_enum'),
 		nullable=False,
@@ -58,6 +68,7 @@ class Invoice(db.Model):
 	updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 	job = db.relationship('Job', back_populates='invoices')
+	original_invoice = db.relationship('Invoice', remote_side=[id], foreign_keys=[original_invoice_id], backref=db.backref('corrections', lazy='dynamic'))
 	payments = db.relationship('Payment', back_populates='invoice', lazy='dynamic', cascade='all, delete-orphan')
 
 	def __repr__(self) -> str:
@@ -110,6 +121,9 @@ class Invoice(db.Model):
 			'id': self.id,
 			'job_id': self.job_id,
 			'invoice_number': self.invoice_number,
+			'invoice_type': self.invoice_type,
+			'original_invoice_id': self.original_invoice_id,
+			'correction_reason': self.correction_reason,
 			'status': self.status,
 			'issue_date': self.issue_date.isoformat() if self.issue_date else None,
 			'due_date': self.due_date.isoformat() if self.due_date else None,

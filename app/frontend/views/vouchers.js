@@ -63,6 +63,87 @@ export async function renderVouchers() {
         promotions.sort((a, b) => (a?.promo_type || '').localeCompare(b?.promo_type || '', 'pl'));
         const promoById = new Map(promotions.map((p) => [String(p.id), p]));
 
+        function ensureLotteryModal() {
+            if (document.getElementById('voucherLotteryModal')) return;
+
+            const modalHtml = `
+                <div class="modal fade" id="voucherLotteryModal" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Wyślij vouchery (losowo)</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-warning mb-3">
+                                    Wylosuje <strong>N</strong> aktywnych klientów i wyśle im PNG vouchera (front).\
+                                    Używane są tylko vouchery: niewysłane, niewykorzystane i niewygasłe.
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Promocja (opcjonalnie)</label>
+                                    <select class="form-select" id="lotteryPromotionId">
+                                        <option value="">(dowolna)</option>
+                                        ${promotions
+                                            .map(
+                                                (p) =>
+                                                    `<option value="${p.id}">${escapeHtml(p.promo_type)} — ${escapeHtml((p.value ?? '').toString())} PLN</option>`
+                                            )
+                                            .join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Ilość (N)</label>
+                                    <input class="form-control" id="lotteryCount" type="number" min="1" max="200" value="10" />
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Anuluj</button>
+                                <button type="button" class="btn btn-success" id="lotterySendBtn">
+                                    <i class="bi bi-send"></i> Wyślij
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.insertAdjacentHTML('beforeend', modalHtml);
+
+            document.getElementById('lotterySendBtn')?.addEventListener('click', async () => {
+                const promotionRaw = document.getElementById('lotteryPromotionId')?.value || '';
+                const countRaw = document.getElementById('lotteryCount')?.value || '';
+
+                const count = parseInt(countRaw, 10);
+                if (!Number.isFinite(count) || count <= 0 || count > 200) {
+                    showToast('Podaj poprawną ilość (1-200)', 'warning');
+                    return;
+                }
+
+                const btn = document.getElementById('lotterySendBtn');
+                if (btn) btn.disabled = true;
+
+                try {
+                    const payload = {
+                        count,
+                        ...(promotionRaw ? { promotion_id: parseInt(promotionRaw, 10) } : {}),
+                    };
+                    const res = await vouchersAPI.lotterySend(payload, { showErrors: true });
+                    const data = res?.data || {};
+                    showToast(`Wysłano: ${data.sent || 0}/${data.requested || count} (błędy: ${data.failed || 0})`, (data.failed || 0) > 0 ? 'warning' : 'success');
+
+                    const modalEl = document.getElementById('voucherLotteryModal');
+                    const modal = modalEl ? window.bootstrap?.Modal.getInstance(modalEl) : null;
+                    if (modal) modal.hide();
+                    currentPage = 1;
+                    await loadVouchers();
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    if (btn) btn.disabled = false;
+                }
+            });
+        }
+
         container.innerHTML = `
             <div class="page-header">
                 <div>
@@ -104,9 +185,14 @@ export async function renderVouchers() {
             <div class="card">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <strong>Lista voucherów</strong>
-                    <button class="btn btn-outline-secondary btn-sm" id="refreshVouchersBtn">
-                        <i class="bi bi-arrow-clockwise"></i> Odśwież
-                    </button>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-success" id="openVoucherLotteryBtn">
+                            <i class="bi bi-send"></i> Wyślij (losowo)
+                        </button>
+                        <button class="btn btn-outline-secondary" id="refreshVouchersBtn">
+                            <i class="bi bi-arrow-clockwise"></i> Odśwież
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="row g-3 mb-3">
@@ -287,6 +373,14 @@ export async function renderVouchers() {
             } catch (e) {
                 console.error(e);
             }
+        });
+
+        document.getElementById('openVoucherLotteryBtn')?.addEventListener('click', () => {
+            ensureLotteryModal();
+            const modalEl = document.getElementById('voucherLotteryModal');
+            if (!modalEl) return;
+            const modal = new window.bootstrap.Modal(modalEl);
+            modal.show();
         });
 
         document.getElementById('filterPromotionId')?.addEventListener('change', () => {

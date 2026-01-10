@@ -22,6 +22,7 @@ class InvoiceSettingsSchema(Schema):
 
     prefix = fields.String(allow_none=True, validate=validate.Length(max=50))
     deposit_prefix = fields.String(allow_none=True, validate=validate.Length(max=50))
+    correction_prefix = fields.String(allow_none=True, validate=validate.Length(max=50))
     year_format = fields.String(allow_none=True, validate=validate.Length(max=50))
     vat_rate = fields.String(
         allow_none=True,

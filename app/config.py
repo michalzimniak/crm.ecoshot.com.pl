@@ -42,6 +42,7 @@ class Config:
     # Invoice settings
     INVOICE_PREFIX = 'FV'
     INVOICE_DEPOSIT_PREFIX = 'FZV'
+    INVOICE_CORRECTION_PREFIX = 'FKV'
     INVOICE_YEAR_FORMAT = '%Y'
     
     # Company data (for invoices & contracts)

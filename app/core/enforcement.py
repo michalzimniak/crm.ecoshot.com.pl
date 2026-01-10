@@ -92,11 +92,15 @@ def can_publish_gallery(job_id):
     # Najpierw sprawdź podstawowe warunki
     can_generate_invoice(job_id)
     
-    # Sprawdź czy faktura istnieje
-    invoice = Invoice.query.filter_by(job_id=job_id).first()
+    # Sprawdź czy istnieje faktura końcowa (lub legacy/standard)
+    invoice = (
+        Invoice.query.filter_by(job_id=job_id)
+        .filter(Invoice.invoice_type.in_(['final', 'standard']))
+        .first()
+    )
     if not invoice:
         raise EnforcementError(
-            f"Brak faktury dla zlecenia #{job_id}. Najpierw wygeneruj fakturę."
+            f"Brak faktury końcowej dla zlecenia #{job_id}. Najpierw wygeneruj fakturę VAT."
         )
     
     # Sprawdź status zlecenia
@@ -135,7 +139,16 @@ def can_download_final_gallery(job_id):
     can_publish_gallery(job_id)
     
     # Sprawdź płatność
-    invoice = Invoice.query.filter_by(job_id=job_id).first()
+    invoice = (
+        Invoice.query.filter_by(job_id=job_id)
+        .filter(Invoice.invoice_type.in_(['final', 'standard']))
+        .order_by(Invoice.created_at.desc())
+        .first()
+    )
+    if not invoice:
+        raise EnforcementError(
+            f"Brak faktury końcowej dla zlecenia #{job_id}"
+        )
     if invoice.paid_amount < invoice.total_amount:
         remaining = invoice.total_amount - invoice.paid_amount
         raise EnforcementError(

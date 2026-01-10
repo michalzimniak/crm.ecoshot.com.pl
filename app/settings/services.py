@@ -26,6 +26,7 @@ COMPANY_FIELD_TO_KEY = {
 INVOICE_FIELD_TO_KEY = {
     "prefix": "INVOICE_PREFIX",
     "deposit_prefix": "INVOICE_DEPOSIT_PREFIX",
+    "correction_prefix": "INVOICE_CORRECTION_PREFIX",
     "year_format": "INVOICE_YEAR_FORMAT",
     "vat_rate": "INVOICE_VAT_RATE",
     "vat_exempt": "INVOICE_VAT_EXEMPT",

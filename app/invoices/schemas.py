@@ -51,6 +51,8 @@ class InvoiceSchema(ma.SQLAlchemyAutoSchema):
     payment_deadline = fields.Method("get_payment_deadline", dump_only=True)
     payment_status = fields.Method("get_payment_status", dump_only=True)
 
+    original_invoice_number = fields.Method("get_original_invoice_number", dump_only=True)
+
     seller_name = fields.Method("get_seller_name", dump_only=True)
     seller_address = fields.Method("get_seller_address", dump_only=True)
     seller_nip = fields.Method("get_seller_nip", dump_only=True)
@@ -75,12 +77,22 @@ class InvoiceSchema(ma.SQLAlchemyAutoSchema):
             'draft', 'issued', 'paid', 'partially_paid', 'overdue', 'cancelled'
         ])
     )
+
+    invoice_type = fields.String(
+        validate=validate.OneOf(['standard', 'deposit', 'final', 'correction'])
+    )
     payment_method = fields.String(
         validate=validate.OneOf(['transfer', 'cash', 'card', 'paypal', 'other'])
     )
 
     def get_payment_deadline(self, obj):
         return obj.due_date.isoformat() if getattr(obj, "due_date", None) else None
+
+    def get_original_invoice_number(self, obj):
+        original = getattr(obj, "original_invoice", None)
+        if not original:
+            return None
+        return getattr(original, "invoice_number", None)
 
     def get_payment_status(self, obj):
         try:

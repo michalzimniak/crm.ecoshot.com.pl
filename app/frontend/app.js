@@ -8,6 +8,10 @@ import { showToast } from './toasts.js';
 import { getStoredAuth, clearAuth } from './api.js';
 import { applyBranding } from './branding.js';
 
+let _mobileSidebarInitialized = false;
+let _miniSidebarInitialized = false;
+let _logoutInitialized = false;
+
 export function initApp() {
     // Best-effort branding (title + logo/name). Public endpoint.
     applyBranding().catch(() => {});
@@ -20,20 +24,8 @@ export function initApp() {
     if (auth && auth.access_token) {
         // User is logged in - show app
         showApp();
-        initSidebar();
+        initAuthenticatedUi();
         initRouter();
-
-        // Setup mini (icons-only) sidebar toggle (desktop)
-        initMiniSidebarToggle();
-        
-        // Setup logout handler
-        document.getElementById('logoutBtn')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            logout();
-        });
-        
-        // Setup sidebar toggle for mobile
-        initMobileSidebar();
         
     } else {
         // User is not logged in - show login
@@ -42,7 +34,27 @@ export function initApp() {
     }
 }
 
+export function initAuthenticatedUi() {
+    initSidebar();
+    initMiniSidebarToggle();
+    initLogoutHandler();
+    initMobileSidebar();
+}
+
+function initLogoutHandler() {
+    if (_logoutInitialized) return;
+    _logoutInitialized = true;
+
+    document.getElementById('logoutBtn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        logout();
+    });
+}
+
 function initMobileSidebar() {
+    if (_mobileSidebarInitialized) return;
+    _mobileSidebarInitialized = true;
+
     const sidebar = document.getElementById('appSidebar');
     const toggleBtn = document.getElementById('sidebarToggle');
     const backdrop = document.getElementById('sidebarBackdrop');
@@ -99,6 +111,9 @@ function initMobileSidebar() {
 }
 
 function initMiniSidebarToggle() {
+    if (_miniSidebarInitialized) return;
+    _miniSidebarInitialized = true;
+
     const STORAGE_KEY = 'ecoshot_sidebar_mini';
     const btn = document.getElementById('sidebarMiniToggle');
     if (!btn) return;

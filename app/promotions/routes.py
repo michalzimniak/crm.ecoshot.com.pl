@@ -3,7 +3,8 @@
 import os
 import uuid
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
+from werkzeug.exceptions import BadRequest, NotFound
 from werkzeug.utils import secure_filename
 
 from app.core.decorators import api_endpoint
@@ -127,3 +128,26 @@ def upload_voucher_template(promotion_id: int):
 
     db.session.commit()
     return jsonify({"success": True, "message": "Szablon vouchera zapisany"})
+
+
+@promotions_bp.route("/<int:promotion_id>/voucher-template/<string:side>", methods=["GET"])
+@api_endpoint(permission=Permission.VIEW_SETTINGS)
+def get_voucher_template_file(promotion_id: int, side: str):
+    """Serve voucher template image (front/back) for preview in admin UI."""
+    if side not in {"front", "back"}:
+        raise BadRequest("Nieprawidłowy parametr: side")
+
+    promo = services.get_promotion_by_id(promotion_id)
+    rel = promo.voucher_bg_front_path if side == "front" else promo.voucher_bg_back_path
+    if not rel:
+        raise NotFound("Brak pliku")
+
+    base = _upload_base_dir()
+    abs_path = os.path.abspath(os.path.join(base, rel))
+    # Path traversal guard
+    if not abs_path.startswith(base + os.sep):
+        raise BadRequest("Nieprawidłowa ścieżka")
+    if not os.path.exists(abs_path):
+        raise NotFound("Brak pliku")
+
+    return send_file(abs_path)

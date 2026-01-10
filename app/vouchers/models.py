@@ -27,11 +27,18 @@ class Voucher(db.Model):
     # Marked when applied to a job.
     used_at = db.Column(db.DateTime, nullable=True, index=True)
 
+    # Lottery / marketing sends (so we don't resend the same voucher).
+    lottery_reserved_at = db.Column(db.DateTime, nullable=True, index=True)
+    lottery_sent_at = db.Column(db.DateTime, nullable=True, index=True)
+    lottery_customer_id = db.Column(db.Integer, db.ForeignKey("customers.id"), nullable=True, index=True)
+    lottery_sent_email = db.Column(db.String(150), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     promotion = db.relationship("Promotion")
     job = db.relationship("Job", back_populates="voucher", uselist=False)
+    lottery_customer = db.relationship("Customer", foreign_keys=[lottery_customer_id])
 
     @property
     def is_used(self) -> bool:

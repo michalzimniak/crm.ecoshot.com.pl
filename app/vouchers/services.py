@@ -25,8 +25,11 @@ from werkzeug.exceptions import BadRequest, NotFound
 from PIL import Image, ImageDraw, ImageFont
 
 from app.extensions import db
+from app.customers.models import Customer
+from app.notifications.email import send_email
 from app.promotions.models import Promotion
 from app.promotions import services as promotions_services
+from app.settings.services import get_setting
 from app.vouchers.models import Voucher
 
 
@@ -450,6 +453,242 @@ def build_voucher_png_zip(promo: Promotion, voucher: Voucher) -> tuple[str, str]
     safe_code = (voucher.code or "voucher").strip().replace(" ", "_")
     download_name = f"voucher_{safe_code}.zip"
     return zip_path, download_name
+
+
+def render_voucher_front_png_bytes(promo: Promotion, voucher: Voucher) -> bytes:
+    """Render only the front side PNG and return raw bytes.
+
+    Used for emailing vouchers (embed as inline image).
+    """
+    # A4 at 96 CSS px per inch.
+    a4_w = int(round(210 / 25.4 * 96))  # ~794
+    a4_h = int(round(297 / 25.4 * 96))  # ~1123
+
+    def _num(v, default: float) -> float:
+        try:
+            if v is None:
+                return default
+            return float(Decimal(str(v)))
+        except Exception:
+            return default
+
+    text_x = _num(getattr(promo, "voucher_text_x_px", None), 75.59)
+    text_y = _num(getattr(promo, "voucher_text_y_px", None), 75.59)
+    qr_x = _num(getattr(promo, "voucher_qr_x_px", None), 604.72)
+    qr_y = _num(getattr(promo, "voucher_qr_y_px", None), 75.59)
+
+    font_family = (getattr(promo, "voucher_text_font_family", None) or "").strip()
+    font_size_pt = _num(getattr(promo, "voucher_text_font_size_pt", None), 12.0)
+    font_size_px = max(6, int(round(font_size_pt * 96.0 / 72.0)))
+
+    font = None
+    try:
+        if font_family:
+            font = ImageFont.truetype(font_family, font_size_px)
+    except Exception:
+        font = None
+
+    if font is None:
+        for path in (
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        ):
+            try:
+                if os.path.exists(path):
+                    font = ImageFont.truetype(path, font_size_px)
+                    break
+            except Exception:
+                continue
+
+    if font is None:
+        font = ImageFont.load_default()
+
+    exp = voucher.expires_at.strftime("%d.%m.%Y")
+    text = f"Bon ważny do {exp}"
+
+    qr_img = _qr_pil_image(voucher.code, transparent=True)
+    qr_size_px = int(round(36 / 25.4 * 96))
+    try:
+        qr_img = qr_img.resize((qr_size_px, qr_size_px), resample=Image.NEAREST)
+    except Exception:
+        qr_img = qr_img.resize((qr_size_px, qr_size_px))
+
+    canvas = Image.new("RGBA", (a4_w, a4_h), (255, 255, 255, 255))
+    bg_path = _promo_bg_abs_path(promo, "front")
+    if bg_path:
+        try:
+            bg = Image.open(bg_path).convert("RGBA")
+            bw, bh = bg.size
+            if bw > 0 and bh > 0:
+                scale = min(a4_w / bw, a4_h / bh)
+                nw = max(1, int(round(bw * scale)))
+                nh = max(1, int(round(bh * scale)))
+                bg_resized = bg.resize((nw, nh), resample=Image.LANCZOS)
+                ox = int((a4_w - nw) / 2)
+                oy = int((a4_h - nh) / 2)
+                canvas.alpha_composite(bg_resized, dest=(ox, oy))
+        except Exception:
+            pass
+
+    draw = ImageDraw.Draw(canvas)
+    try:
+        draw.text((int(round(text_x)), int(round(text_y))), text, fill=(0, 0, 0, 255), font=font)
+    except Exception:
+        draw.text((int(round(text_x)), int(round(text_y))), text, fill=(0, 0, 0, 255))
+
+    try:
+        canvas.alpha_composite(qr_img, dest=(int(round(qr_x)), int(round(qr_y))))
+    except Exception:
+        pass
+
+    out = canvas.convert("RGB")
+    from io import BytesIO
+
+    buf = BytesIO()
+    out.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _sql_random_func():
+    """Return a SQL random() function compatible with the current DB."""
+    from sqlalchemy import func
+
+    try:
+        bind = db.session.get_bind()
+        name = getattr(getattr(bind, "dialect", None), "name", "") or ""
+    except Exception:
+        name = ""
+
+    if name in {"sqlite", "postgresql"}:
+        return func.random()
+    return func.rand()
+
+
+def send_voucher_lottery(*, promotion_id: int | None, count: int) -> dict:
+    """Randomly pick N customers and email them voucher front PNG.
+
+    Uses vouchers that are: not used, not expired, not already sent/reserved.
+    Marks vouchers as reserved first (to prevent concurrent sends), then as sent on success.
+    """
+    try:
+        count = int(count)
+    except Exception:
+        raise BadRequest("Nieprawidłowa liczba")
+
+    if count <= 0 or count > 200:
+        raise BadRequest("Nieprawidłowa liczba (1-200)")
+
+    cfg = current_app.config
+    if not cfg.get("SMTP_HOST") or not cfg.get("SMTP_FROM"):
+        raise BadRequest("Brak konfiguracji SMTP (SMTP_HOST/SMTP_FROM)")
+
+    now = _now()
+    rnd = _sql_random_func()
+
+    customers_q = (
+        Customer.query.filter(Customer.is_active.is_(True))
+        .filter(Customer.email.isnot(None))
+        .filter(Customer.email != "")
+        .order_by(rnd)
+    )
+    customers = customers_q.limit(count).all()
+    if len(customers) < count:
+        raise BadRequest("Brak wystarczającej liczby aktywnych klientów z e-mailem")
+
+    vouchers_q = (
+        Voucher.query.filter(Voucher.used_at.is_(None))
+        .filter(Voucher.expires_at >= now)
+        .filter(Voucher.job == None)  # noqa: E711
+        .filter(Voucher.lottery_reserved_at.is_(None))
+        .filter(Voucher.lottery_sent_at.is_(None))
+        .order_by(rnd)
+    )
+    if promotion_id:
+        vouchers_q = vouchers_q.filter(Voucher.promotion_id == int(promotion_id))
+
+    vouchers = vouchers_q.limit(count).all()
+    if len(vouchers) < count:
+        raise BadRequest("Brak wystarczającej liczby dostępnych voucherów (niewysłanych/niewykorzystanych/ważnych)")
+
+    pairs = list(zip(customers, vouchers))
+
+    # Reserve first to avoid concurrent sends reusing the same vouchers.
+    for customer, voucher in pairs:
+        voucher.lottery_reserved_at = now
+        voucher.lottery_customer_id = customer.id
+        voucher.lottery_sent_email = customer.email
+    db.session.commit()
+
+    company_name = str(get_setting("COMPANY_NAME", "") or "").strip()
+    if not company_name:
+        company_name = str(cfg.get("BRAND_NAME", "") or "").strip()
+
+    sent = 0
+    failed = 0
+
+    from email.utils import make_msgid
+
+    for customer, voucher in pairs:
+        promo = voucher.promotion or db.session.get(Promotion, voucher.promotion_id)
+        if not promo:
+            # Make the voucher eligible again.
+            voucher.lottery_reserved_at = None
+            voucher.lottery_customer_id = None
+            voucher.lottery_sent_email = None
+            failed += 1
+            continue
+
+        img_bytes = render_voucher_front_png_bytes(promo, voucher)
+        cid = make_msgid()
+        cid_ref = cid[1:-1]
+
+        promo_value = str(getattr(promo, "value", "") or "")
+        exp = voucher.expires_at.strftime("%d.%m.%Y")
+
+        subject = f"Voucher {promo_value} PLN - {company_name}".strip(" -")
+
+        body_text = (
+            f"Dzień dobry,\n\n"
+            f"Przesyłamy voucher o wartości {promo_value} PLN.\n"
+            f"Kod: {voucher.code}\n"
+            f"Ważny do: {exp}\n"
+        )
+
+        body_html = f"""
+        <div style='font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4;'>
+          <p>Dzień dobry,</p>
+          <p>Przesyłamy voucher o wartości <strong>{promo_value} PLN</strong>.</p>
+          <p><strong>Kod:</strong> {voucher.code}<br/>
+             <strong>Ważny do:</strong> {exp}</p>
+          <p><img alt='Voucher' src='cid:{cid_ref}' style='max-width: 100%; height: auto; border: 1px solid #eee;'/></p>
+        </div>
+        """
+
+        ok = send_email(
+            to_email=customer.email,
+            subject=subject,
+            body_text=body_text,
+            body_html=body_html,
+            inline_images=[{"content": img_bytes, "maintype": "image", "subtype": "png", "cid": cid}],
+        )
+
+        if ok:
+            voucher.lottery_sent_at = _now()
+            sent += 1
+        else:
+            # Make it eligible again.
+            voucher.lottery_reserved_at = None
+            voucher.lottery_customer_id = None
+            voucher.lottery_sent_email = None
+            failed += 1
+
+    db.session.commit()
+
+    return {
+        "requested": count,
+        "sent": sent,
+        "failed": failed,
+    }
 
 
 def _money(value) -> str:

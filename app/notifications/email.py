@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import smtplib
 from email.message import EmailMessage
+from email.utils import make_msgid
 from typing import Optional
 
 from flask import current_app
@@ -13,6 +14,7 @@ def send_email(
     subject: str,
     body_text: str,
     body_html: Optional[str] = None,
+    inline_images: Optional[list[dict]] = None,
 ) -> bool:
     """Send an email using SMTP settings from Flask config.
 
@@ -49,6 +51,20 @@ def send_email(
 
     if body_html:
         msg.add_alternative(body_html, subtype="html")
+
+        if inline_images:
+            try:
+                html_part = msg.get_payload()[-1]
+                for img in inline_images:
+                    content = img.get("content")
+                    if not content:
+                        continue
+                    maintype = img.get("maintype") or "image"
+                    subtype = img.get("subtype") or "png"
+                    cid = img.get("cid") or make_msgid()
+                    html_part.add_related(content, maintype=maintype, subtype=subtype, cid=cid)
+            except Exception:
+                current_app.logger.exception("Inline image attach failed")
 
     try:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:

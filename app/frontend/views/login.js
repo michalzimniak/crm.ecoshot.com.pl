@@ -3,10 +3,9 @@
  */
 
 import { login } from '../api.js';
-import { showApp, logout } from '../app.js';
+import { showApp, initAuthenticatedUi } from '../app.js';
 import { showToast } from '../toasts.js';
 import { navigate } from '../router.js';
-import { initSidebar } from '../sidebar.js';
 import { clearFormErrors, requireValue, wireClearOnInput } from '../forms.js';
 import { applyBranding } from '../branding.js';
 
@@ -100,18 +99,7 @@ async function handleLogin(e) {
             
             // Show app and navigate to dashboard
             showApp();
-            initSidebar();
-
-            // Setup logout handler
-            document.getElementById('logoutBtn')?.addEventListener('click', (ev) => {
-                ev.preventDefault();
-                logout();
-            });
-
-            // Setup sidebar toggle for mobile
-            document.getElementById('sidebarToggle')?.addEventListener('click', () => {
-                document.getElementById('appSidebar')?.classList.toggle('show');
-            });
+            initAuthenticatedUi();
             navigate('/dashboard');
         }
         

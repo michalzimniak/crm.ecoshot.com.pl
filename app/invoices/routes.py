@@ -31,6 +31,8 @@ def get_invoices():
         filters['job_id'] = int(request.args.get('job_id'))
     if request.args.get('customer_id'):
         filters['customer_id'] = int(request.args.get('customer_id'))
+    if request.args.get('invoice_type'):
+        filters['invoice_type'] = request.args.get('invoice_type')
     
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 50))
@@ -81,6 +83,41 @@ def create_invoice():
         'data': invoice_schema.dump(invoice),
         'message': 'Faktura utworzona'
     }), 201
+
+
+@invoices_bp.route('/deposit', methods=['POST'])
+@api_endpoint(permission=Permission.CREATE_INVOICE)
+def create_deposit_invoice():
+    """Create deposit invoice for a job (idempotent)."""
+    data = request.get_json() or {}
+    job_id = data.get('job_id')
+    if not job_id:
+        return jsonify({'success': False, 'error': 'job_id is required'}), 400
+
+    invoice = services.create_deposit_invoice_for_job(int(job_id))
+    return jsonify({'success': True, 'data': invoice_schema.dump(invoice)}), 201
+
+
+@invoices_bp.route('/final', methods=['POST'])
+@api_endpoint(permission=Permission.CREATE_INVOICE)
+def create_final_invoice():
+    """Create final VAT invoice for a job (idempotent)."""
+    data = request.get_json() or {}
+    job_id = data.get('job_id')
+    if not job_id:
+        return jsonify({'success': False, 'error': 'job_id is required'}), 400
+
+    invoice = services.create_final_invoice_for_job(int(job_id))
+    return jsonify({'success': True, 'data': invoice_schema.dump(invoice)}), 201
+
+
+@invoices_bp.route('/<int:invoice_id>/correction', methods=['POST'])
+@api_endpoint(permission=Permission.CREATE_INVOICE)
+def create_invoice_correction(invoice_id):
+    """Create correction invoice linked to an existing invoice."""
+    data = request.get_json() or {}
+    invoice = services.create_correction_invoice(invoice_id, data)
+    return jsonify({'success': True, 'data': invoice_schema.dump(invoice)}), 201
 
 
 @invoices_bp.route('/<int:invoice_id>', methods=['PUT'])

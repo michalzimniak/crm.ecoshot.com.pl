@@ -356,6 +356,60 @@ function setupPaymentsListeners(context = {}) {
     // Modal form listeners are attached when opening the modal.
 }
 
+async function openRefundPaymentModal(paymentId) {
+    const modalEl = document.getElementById('paymentRefundModal');
+    if (!modalEl) return;
+
+    const form = document.getElementById('paymentRefundForm');
+    const idEl = document.getElementById('refundPaymentId');
+    const reasonEl = document.getElementById('refundReason');
+
+    if (idEl) idEl.value = String(paymentId);
+    if (reasonEl) reasonEl.value = '';
+
+    const modal = new bootstrap.Modal(modalEl);
+
+    // Clear inline errors while typing (avoid stacking listeners)
+    if (form && form.dataset.wireClearOnInput !== '1') {
+        wireClearOnInput(form);
+        form.dataset.wireClearOnInput = '1';
+    }
+
+    // Avoid stacking submit listeners
+    if (form && form.dataset.wiredSubmit !== '1') {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const pid = parseOptionalInt(idEl?.value);
+            const reason = String(reasonEl?.value || '').trim();
+
+            if (!pid) {
+                console.error('Missing refund payment id');
+                return;
+            }
+            if (!reason || reason.length < 3) {
+                setFieldError(reasonEl, 'Podaj powód zwrotu (min. 3 znaki)');
+                reasonEl?.focus?.();
+                return;
+            }
+
+            try {
+                await paymentsAPI.refund(pid, reason);
+                modal.hide();
+                showToast('success', 'Zwrot zrealizowany');
+                await renderPayments();
+            } catch (err) {
+                console.error(err);
+            }
+        });
+        form.dataset.wiredSubmit = '1';
+    }
+
+    modal.show();
+    // Focus textarea after the modal is shown.
+    setTimeout(() => reasonEl?.focus?.(), 50);
+}
+
 async function openCreatePaymentModal({ invoiceId = null, jobId = null, openedFromRoute = false } = {}) {
     const modalEl = document.getElementById('paymentCreateModal');
     if (!modalEl) return;
@@ -739,6 +793,32 @@ function renderInvoiceCell(p) {
             <a href="#/invoices/${inv.id}">${invoiceNumber}</a>
             ${customerName ? `<div class="text-muted small">${customerName}</div>` : ''}
         </div>
+
+            <!-- Refund Payment Modal -->
+            <div class="modal fade" id="paymentRefundModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise"></i> Zwrot płatności</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="paymentRefundForm" novalidate>
+                                <input type="hidden" id="refundPaymentId" />
+                                <div class="mb-3">
+                                    <label class="form-label" for="refundReason">Powód zwrotu</label>
+                                    <textarea class="form-control" id="refundReason" rows="3" required></textarea>
+                                    <div class="form-text">Wymagane (min. 3 znaki)</div>
+                                </div>
+                                <div class="d-flex justify-content-end gap-2">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Anuluj</button>
+                                    <button type="submit" class="btn btn-warning">Wykonaj zwrot</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
     `;
 }
 
@@ -832,14 +912,7 @@ window.completePayment = async (id) => {
 };
 
 window.refundPayment = async (id) => {
-    const reason = prompt('Powód zwrotu:');
-    if (!reason) return;
-    try {
-        await paymentsAPI.refund(id, reason);
-        await renderPayments();
-    } catch (err) {
-        console.error(err);
-    }
+    await openRefundPaymentModal(id);
 };
 
 window.deletePayment = async (id) => {

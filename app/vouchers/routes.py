@@ -8,7 +8,7 @@ from werkzeug.exceptions import BadRequest
 from app.core.decorators import api_endpoint
 from app.core.permissions import Permission
 from app.vouchers import services
-from app.vouchers.schemas import vouchers_schema, voucher_generate_schema
+from app.vouchers.schemas import vouchers_schema, voucher_generate_schema, voucher_lottery_send_schema
 from app.vouchers.models import Voucher
 
 
@@ -164,3 +164,25 @@ def download_single_voucher_png(voucher_id: int):
         return resp
 
     return send_file(zip_path, as_attachment=True, download_name=download_name)
+
+
+@vouchers_bp.route("/lottery/send", methods=["POST"])
+@api_endpoint(permission=Permission.MANAGE_SETTINGS)
+def send_voucher_lottery():
+    payload = request.get_json() or {}
+    errors = voucher_lottery_send_schema.validate(payload)
+    if errors:
+        return jsonify({"success": False, "errors": errors}), 400
+
+    promotion_id = payload.get("promotion_id")
+    if promotion_id is not None and str(promotion_id).strip() != "":
+        try:
+            promotion_id = int(promotion_id)
+        except Exception:
+            promotion_id = None
+    else:
+        promotion_id = None
+
+    count = int(payload["count"])
+    result = services.send_voucher_lottery(promotion_id=promotion_id, count=count)
+    return jsonify({"success": True, "data": result})

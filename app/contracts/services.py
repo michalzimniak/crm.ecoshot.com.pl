@@ -262,6 +262,16 @@ def sign_contract(
     contract.status = "signed"
 
     db.session.commit()
+
+    # After a contract is signed, create a deposit invoice (zaliczkowa).
+    # Idempotent: if it already exists, services returns existing.
+    try:
+        from app.invoices.services import create_deposit_invoice_for_job
+
+        create_deposit_invoice_for_job(contract.job_id)
+    except Exception:
+        # Don't block contract signing if invoice generation fails.
+        pass
     return contract
 
 
@@ -494,6 +504,30 @@ def upload_signed_scan(contract_id: int, file_storage) -> Contract:
     contract.signed_scan_mime_type = getattr(file_storage, "mimetype", None)
     contract.signed_scan_size = size
     contract.signed_scan_uploaded_at = datetime.utcnow()
+
+    # Auto: uploading a signed scan implies the contract is signed.
+    if contract.status != "signed":
+        contract.status = "signed"
+        if not contract.signed_at:
+            contract.signed_at = datetime.utcnow()
+
+        # Auto: move the job to "Oczekujące" (UI label), which maps to status=draft.
+        try:
+            job = contract.job or get_job_by_id(contract.job_id)
+            if job and job.status not in {"completed", "cancelled", "rejected"}:
+                job.status = "draft"
+        except Exception:
+            # Do not fail upload if job update fails.
+            pass
+
+        # Auto: after signing, create a deposit invoice (idempotent).
+        try:
+            from app.invoices.services import create_deposit_invoice_for_job
+
+            create_deposit_invoice_for_job(contract.job_id)
+        except Exception:
+            # Don't block upload if invoice generation fails.
+            pass
 
     db.session.commit()
     return contract
