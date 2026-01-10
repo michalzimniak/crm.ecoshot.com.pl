@@ -54,7 +54,7 @@ export function renderLogin() {
                     </form>
                     
                     <div class="mt-4 text-center text-muted small">
-                        <p class="mb-0"><span id="loginBrandFooter">EcoShot CRM</span> &copy; 2026</p>
+                        <p class="mb-0">&copy; 2026 zimniak-tech.pl</p>
                     </div>
                 </div>
             </div>
