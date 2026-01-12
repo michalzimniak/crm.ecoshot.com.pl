@@ -393,8 +393,7 @@ flask db upgrade
 
 4) **Uruchomienie aplikacji**
 - Produkcyjnie uruchamiaj przez WSGI (np. gunicorn) lub systemd service, nie przez `flask run`.
-- Zadbaj o logowanie (stdout/systemd journal lub plik logów).
-
+ Płatności
 5) **Cron i zmienne środowiskowe**
 Cron często nie ma tych samych zmiennych co shell użytkownika — najprościej w każdej linijce jawnie załadować env.
 
