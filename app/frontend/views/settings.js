@@ -2,7 +2,7 @@
  * Settings View - Ustawienia systemu
  */
 
-import { settingsAPI, jobsAPI, promotionsAPI } from '../api.js';
+import { settingsAPI, jobsAPI, promotionsAPI, apiDownload } from '../api.js';
 import { showToast } from '../toasts.js';
 import { confirmDialog } from '../confirm.js';
 import { validateRequiredFields, requireEmail, requireValue, wireClearOnInput } from '../forms.js';
@@ -1408,23 +1408,55 @@ function openPromotionModal({ mode, promotionId = null }) {
         el.innerHTML = html || '';
     };
 
-    const renderExistingTemplatePreview = (el, promotionId, side, relPath) => {
+    const renderExistingTemplatePreview = async (el, promotionId, side, relPath) => {
         if (!el) return;
         if (!relPath) {
             setPreviewHtml(el, '<span class="text-muted">Aktualnie: brak</span>');
             return;
         }
-        // Use API endpoint for safe preview.
-        const src = `#/`; // dummy to avoid accidental navigation
-        // Build absolute URL (works with SPA hash routing)
-        const url = `/api/promotions/${promotionId}/voucher-template/${side}`;
+
+        // NOTE: This UI uses JWT auth via Authorization header.
+        // <img src="/api/..."> cannot attach headers, so we must fetch as blob.
+        const requestKey = `${promotionId}:${side}:${Date.now()}`;
+        el.dataset.previewRequestKey = requestKey;
+
         setPreviewHtml(
             el,
             `<div class="d-flex align-items-center gap-2">`
             + `<span class="text-muted">Aktualnie:</span>`
-            + `<img src="${url}" alt="${side}" class="img-thumbnail" style="max-height:120px; max-width:100%; object-fit:contain;"/>`
+            + `<span class="text-muted">ładowanie…</span>`
             + `</div>`
         );
+
+        try {
+            const res = await apiDownload(`/promotions/${promotionId}/voucher-template/${side}`, { showErrors: false });
+            if (el.dataset.previewRequestKey !== requestKey) {
+                // A newer request is in-flight (modal reopened, etc.).
+                return;
+            }
+
+            const blob = res?.blob;
+            if (!blob) {
+                setPreviewHtml(el, '<span class="text-muted">Aktualnie: brak</span>');
+                return;
+            }
+
+            const objectUrl = URL.createObjectURL(blob);
+            el.dataset.objectUrl = objectUrl;
+            el.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted">Aktualnie:</span>
+                    <img src="${objectUrl}" alt="${escapeHtml(side)}" class="img-thumbnail" style="max-height:120px; max-width:100%; object-fit:contain;"/>
+                </div>
+            `;
+        } catch (err) {
+            if (el.dataset.previewRequestKey !== requestKey) return;
+            if (err?.status === 404) {
+                setPreviewHtml(el, '<span class="text-muted">Aktualnie: brak</span>');
+                return;
+            }
+            setPreviewHtml(el, '<span class="text-muted">Aktualnie: (nie udało się załadować podglądu)</span>');
+        }
     };
 
     const renderSelectedFilePreview = (el, file) => {

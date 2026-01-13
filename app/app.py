@@ -68,6 +68,10 @@ def create_app(config_name=None):
         if path.startswith('api/'):
             abort(404)
 
+        # Ensure proper content-type for PWA manifest
+        if path == 'manifest.webmanifest':
+            return send_from_directory(frontend_dir, path, mimetype='application/manifest+json')
+
         # Serve frontend files (JS, CSS, images, etc.)
         abs_path = os.path.join(frontend_dir, path)
         if os.path.isfile(abs_path):

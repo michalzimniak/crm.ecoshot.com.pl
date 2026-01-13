@@ -7,12 +7,16 @@ import { initSidebar } from './sidebar.js';
 import { showToast } from './toasts.js';
 import { getStoredAuth, clearAuth } from './api.js';
 import { applyBranding } from './branding.js';
+import { initPwa, enablePwaInstallBanner } from './pwa.js';
 
 let _mobileSidebarInitialized = false;
 let _miniSidebarInitialized = false;
 let _logoutInitialized = false;
 
 export function initApp() {
+    // Best-effort PWA (manifest + service worker)
+    initPwa();
+
     // Best-effort branding (title + logo/name). Public endpoint.
     applyBranding().catch(() => {});
 
@@ -161,6 +165,9 @@ function initMiniSidebarToggle() {
 export function showApp() {
     document.getElementById('loginContainer').classList.add('d-none');
     document.getElementById('appContainer').classList.remove('d-none');
+
+    // Banner is only relevant after login.
+    enablePwaInstallBanner();
 }
 
 export function showLogin() {
