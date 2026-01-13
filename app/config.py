@@ -15,7 +15,7 @@ class Config:
     
     # SQLAlchemy
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'mysql+pymysql://root:2work4fun!@localhost/crm_ecoshot_com_pl'
+        'mysql+pymysql://root:f0f0r0@localhost/crm_ecoshot_com_pl'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
     
@@ -28,7 +28,7 @@ class Config:
     JWT_HEADER_TYPE = 'Bearer'
     
     # File uploads
-    UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or 'uploads'
+    UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or '/var/local/ecoshot_uploads'
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'zip'}
     
@@ -46,12 +46,12 @@ class Config:
     INVOICE_YEAR_FORMAT = '%Y'
     
     # Company data (for invoices & contracts)
-    COMPANY_NAME = os.environ.get('COMPANY_NAME') or 'EcoShot Photography'
-    COMPANY_ADDRESS = os.environ.get('COMPANY_ADDRESS') or 'ul. Przykładowa 1, 00-000 Warszawa'
+    COMPANY_NAME = os.environ.get('COMPANY_NAME') or 'EcoShot Danuta Zimniak'
+    COMPANY_ADDRESS = os.environ.get('COMPANY_ADDRESS') or 'ul. Anyżowa 2, 86-031 Osielsko'
     COMPANY_NIP = os.environ.get('COMPANY_NIP') or '1234567890'
-    COMPANY_PHONE = os.environ.get('COMPANY_PHONE') or '+48 123 456 789'
-    COMPANY_EMAIL = os.environ.get('COMPANY_EMAIL') or 'kontakt@ecoshot.com.pl'
-    COMPANY_BANK = os.environ.get('COMPANY_BANK') or 'Bank Przykładowy'
+    COMPANY_PHONE = os.environ.get('COMPANY_PHONE') or '+48 882 193 113'
+    COMPANY_EMAIL = os.environ.get('COMPANY_EMAIL') or 'danka@ecoshot.com.pl'
+    COMPANY_BANK = os.environ.get('COMPANY_BANK') or 'Bank ING'
     COMPANY_ACCOUNT = os.environ.get('COMPANY_ACCOUNT') or '12 3456 7890 1234 5678 9012 3456'
     
     # CORS
@@ -71,12 +71,12 @@ class Config:
     PAYU_NOTIFY_URL = os.environ.get('PAYU_NOTIFY_URL')
 
     # SMTP / Email (reminders)
-    SMTP_HOST = os.environ.get('SMTP_HOST')
-    SMTP_PORT = int(os.environ.get('SMTP_PORT') or 587)
-    SMTP_USERNAME = os.environ.get('SMTP_USERNAME')
-    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD')
+    SMTP_HOST = os.environ.get('SMTP_HOST') or 'zimniak-tech.pl'
+    SMTP_PORT = int(os.environ.get('SMTP_PORT') or 465)
+    SMTP_USERNAME = os.environ.get('SMTP_USERNAME') or 'crm@ecohost.com.pl'
+    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD') or 'g6607Ncu@'
     SMTP_USE_TLS = (os.environ.get('SMTP_USE_TLS', 'true').lower() in ('1', 'true', 'yes', 'on'))
-    SMTP_FROM = os.environ.get('SMTP_FROM') or COMPANY_EMAIL
+    SMTP_FROM = os.environ.get('SMTP_FROM') or 'crm@ecohost.com.pl'
 
     REMINDERS_ENABLED = (os.environ.get('REMINDERS_ENABLED', 'true').lower() in ('1', 'true', 'yes', 'on'))
     REMINDERS_SCHEDULE_TO = os.environ.get('REMINDERS_SCHEDULE_TO') or COMPANY_EMAIL
