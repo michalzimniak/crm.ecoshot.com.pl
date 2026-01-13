@@ -6,6 +6,12 @@
     <title>EcoShot CRM</title>
 
     <meta name="robots" content="noindex,nofollow">
+
+    <!-- PWA -->
+    <meta name="theme-color" content="#198754">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -369,6 +375,19 @@
                 gap: 1rem;
             }
         }
+
+        /* PWA install banner */
+        #pwaInstallBanner {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1040;
+        }
+
+        body.has-pwa-banner {
+            padding-bottom: 84px; /* space for banner on mobile */
+        }
     </style>
 </head>
 <body>
@@ -405,6 +424,20 @@
     
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
+
+    <!-- PWA Install Banner (mobile) -->
+    <div id="pwaInstallBanner" class="d-none">
+        <div class="alert alert-success m-2 shadow-sm d-flex align-items-center justify-content-between gap-2" role="alert">
+            <div class="small">
+                <strong>Zainstaluj aplikację</strong>
+                <div class="text-muted">Dodaj EcoShot CRM do ekranu głównego.</div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-success" id="pwaInstallBtn" type="button">Zainstaluj</button>
+                <button class="btn btn-sm btn-outline-success" id="pwaInstallCloseBtn" type="button" aria-label="Zamknij">✕</button>
+            </div>
+        </div>
+    </div>
     
     <!-- App Container (hidden until logged in) -->
     <div id="appContainer" class="d-none">
